@@ -4,16 +4,22 @@ import cors from "cors";
 import chalk from "chalk";
 import { MongoClient } from "mongodb";
 import dayjs from "dayjs";
+import joi from 'joi';
 
 import dotenv from "dotenv";
 dotenv.config();
 
+let db;
 const mongoClient = new MongoClient(process.env.MONGO_URL);
-let db = null;
+mongoClient.connect().then(() => {
+    db = mongoClient.db(process.env.DATABASE);
+    console.log(chalk.green.bold("Mongo is working!"))
+})
+
 
 const app = express();
-app.use(json);
-app.use(cors);
+app.use(json());
+app.use(cors());
 
 app.post('/participants', async (req, res) => {
     const nameSchema = joi.object({
@@ -35,7 +41,7 @@ app.post('/participants', async (req, res) => {
         if (participant.error) {
             return res.status(422).send("name deve ser strings não vazio!");
         } else {
-            const existParticipant = db.collection("participants").findOne(name);
+            const existParticipant = await db.collection("participants").findOne({name: name});
             if (existParticipant) {
                 console.log(`User ${name} exist in database`);
                 return res.sendStatus(409);
@@ -99,7 +105,7 @@ app.post('/messages', async (req, res) => {
 
 app.get('/messages', async (req, res) => {
     const { limit } = req.query;
-    const { user } = req.header;
+    const { user } = req.headers;
 
     try {
         await mongoClient.connect();
@@ -144,7 +150,7 @@ app.get('/messages', async (req, res) => {
 })
 
 app.post('status', async (req, res) => {
-    const { user } = req.header;
+    const { user } = req.headers;
 
     try {
         mongoClient.connect();
@@ -173,8 +179,8 @@ setInterval(async () =>{
     const sec = dayjs().second();
 
     try{
-        mongoClient.connect();
-        db = db.mongoClient(process.env.DATABASE);
+        await mongoClient.connect();
+        db = mongoClient.db(process.env.DATABASE);
 
         const compareStatus = Date.now() - 10000;
         
@@ -186,7 +192,6 @@ setInterval(async () =>{
             }
         });
     }catch (err){
-        res.sendStatus(500);
         console.error(err);
     }
 }, 15000)
