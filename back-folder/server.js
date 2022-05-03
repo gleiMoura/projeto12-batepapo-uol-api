@@ -6,6 +6,8 @@ import { MongoClient } from "mongodb";
 import dayjs from "dayjs";
 
 import dotenv from "dotenv";
+import { send } from "express/lib/response";
+import { date } from "joi";
 dotenv.config();
 
 const mongoClient = new MongoClient(process.env.MONGO_URL);
@@ -26,17 +28,17 @@ app.post('/participants', async (req, res) => {
     const min = dayjs().minute();
     const sec = dayjs().second();
 
-    const {name} = req.body;
+    const { name } = req.body;
 
     try {
         await mongoClient.connect();
         db = mongoClient.db(process.env.DATABASE);
-        
+
         if (participant.error) {
             return res.status(422).send("name deve ser strings não vazio!");
         } else {
             const existParticipant = db.collection("participants").findOne(name);
-            if (existParticipant){
+            if (existParticipant) {
                 console.log(`User ${name} exist in database`);
                 return res.sendStatus(409);
             } else {
@@ -56,7 +58,7 @@ app.get('/participants', async (req, res) => {
     try {
         const participants = await db.collection("participants").find().toArray();
         res.send(participants);
-    } catch(error) {
+    } catch (error) {
         console.log(error);
     }
 })
@@ -79,7 +81,7 @@ app.post('/messages', async (req, res) => {
     const existParticipant = await db.collection("participants").find({ name: user }).toArray();
     const typeBoolean = (req.body.type === "message" || req.body.type === "private_message")
 
-    try{
+    try {
         await mongoClient.connect();
         db = mongoClient.db(process.env.DATABASE);
 
@@ -89,22 +91,22 @@ app.post('/messages', async (req, res) => {
             await db.collection("messages").insertOne({ from: user, to: req.body.to, text: req.body.text, type: req.body.type, time: `${hour}:${min}:${sec}` });
             return res.sendStatus(201);
         }
-    }catch{
+    } catch {
         res.sendStatus(500);
     }
 });
 
-app.get('/messages', async(req, res) => {
-    const {limit} = req.query;
-    const {user} = req.header;
+app.get('/messages', async (req, res) => {
+    const { limit } = req.query;
+    const { user } = req.header;
 
-    try{
+    try {
         await mongoClient.connect();
         db = mongoClient.db(process.env.DATABASE);
 
-        const existUserTo = await db.collection("messages").findOne({to: user});
-        const existUserFrom = await db.collection("messages").findOne({from: user});
-        if(!existUserFrom && !existUserTo){
+        const existUserTo = await db.collection("messages").findOne({ to: user });
+        const existUserFrom = await db.collection("messages").findOne({ from: user });
+        if (!existUserFrom && !existUserTo) {
             return res.sendStatus(404);
         }
 
@@ -112,16 +114,16 @@ app.get('/messages', async(req, res) => {
 
         const userMessages = messages.filter(element => {
             if (element.from === user ||
-            element.type === "status" ||
-            element.type === "message" ||
-            (element.to === user && element.type === "private-message") ||
-            (element.from === user && element.type === "private-message")
-            ){
+                element.type === "status" ||
+                element.type === "message" ||
+                (element.to === user && element.type === "private-message") ||
+                (element.from === user && element.type === "private-message")
+            ) {
                 return element;
             }
         })
 
-        if(limit < userMessages.length){
+        if (limit < userMessages.length) {
             const allMessages = [];
 
             for (let i = messages.length - 1; i > messages.length - limit; i--) {
@@ -129,14 +131,39 @@ app.get('/messages', async(req, res) => {
             }
             return res.send(allMessages)
         }
-        if(!limit || limit > userMessages.length){
+
+        if (!limit || limit > userMessages.length) {
             return res.send(userMessages)
         }
-    }catch (err){
+    } catch (err) {
         console.error(err);
         res.sendStatus(500);
     }
-    
+
+})
+
+app.post('status', async (req, res) => {
+    const { user } = req.header;
+
+    try {
+        mongoClient.connect();
+        db = mongoClient.db(process.env.DATABASE);
+
+        const existUser = await db.collection("participants").findOne({ name: user });
+        if (!existUser) {
+            return res.sendStatus(404);
+        }
+
+        await db.collection("participants").updateOne(
+            { name: user },
+            { $set: { lastStatus: Date.now() } }
+        );
+
+        res.sendStatus(200);
+    } catch (err) {
+        res.sendStatus(500);
+        console.error(err);
+    }
 })
 
 
