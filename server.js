@@ -6,8 +6,6 @@ import { MongoClient } from "mongodb";
 import dayjs from "dayjs";
 
 import dotenv from "dotenv";
-import { send } from "express/lib/response";
-import { date } from "joi";
 dotenv.config();
 
 const mongoClient = new MongoClient(process.env.MONGO_URL);
@@ -56,8 +54,11 @@ app.post('/participants', async (req, res) => {
 
 app.get('/participants', async (req, res) => {
     try {
+        mongoClient.connect();
+        db = mongoClient.db(process.env.DATABASE);
+
         const participants = await db.collection("participants").find().toArray();
-        res.send(participants);
+        return res.send(participants);
     } catch (error) {
         console.log(error);
     }
@@ -166,6 +167,29 @@ app.post('status', async (req, res) => {
     }
 })
 
+setInterval(async () =>{
+    const hour = dayjs().hour();
+    const min = dayjs().minute();
+    const sec = dayjs().second();
+
+    try{
+        mongoClient.connect();
+        db = db.mongoClient(process.env.DATABASE);
+
+        const compareStatus = Date.now() - 10000;
+        
+        const participants = await db.collection("participants").find().toArray();
+        participants.forEach(element => {
+            if(parseInt(element.status) >= compareStatus){
+                db.collection("participants").deleteOne({name: element.name});
+                db.collection("messages").insertOne({ from: element.name, to: 'Todos', text: 'sai da sala...', type: 'status', time: `${hour}:${min}:${sec}`})
+            }
+        });
+    }catch (err){
+        res.sendStatus(500);
+        console.error(err);
+    }
+}, 15000)
 
 app.listen(process.env.PORT, () => console.log(chalk.green.bold("Server is working in port " + process.env.PORT)));
 
